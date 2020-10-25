@@ -29,7 +29,7 @@ def main():
 
 
 def execute_command(command_args):
-    result = "Unkown command"
+    result = "Unknown command"
     if command_args[0] == "sort":
         result = sort_job(command_args[1])
     elif command_args[0] == "book_search":
