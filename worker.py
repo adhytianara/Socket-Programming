@@ -1,12 +1,14 @@
 import socket
 import requests
 import time
+from _thread import *
 
 HOST = '127.0.0.1'           # Standard loopback interface address (localhost)
 PORT = 65432        # Port to listen on (non-privileged ports are > 1023)
 
 
 def main():
+    status = {"status": 'ACTIVE'}
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server.bind((HOST, PORT))
@@ -15,30 +17,44 @@ def main():
     while True:
         print("Waiting for new connection")
         client, addr = server.accept()
+        client.sendall(bytes('Connection accepted', "utf-8"))
         print('Connected by', addr)
 
         data = client.recv(1024).decode('utf-8')
-        command_args = data.split(" ")
+        if data == "CHECK_AVAILABILITY":
+            start_new_thread(check_availability, (client, addr, status))
+        elif data == "EXECUTE_JOB":
+            status['status'] = "BUSY"
+            job = client.recv(1024).decode('utf-8')
+            start_new_thread(execute_job, (client, job, status))
 
+
+def check_availability(client, addr, status):
+    client.sendall(bytes(status.get('status'), 'utf-8'))
+    client.close()
+
+
+def execute_job(client, job, status):
+    try:
+        job_args = job.split(" ")
         start = time.time()
-        result = execute_command(command_args)
+
+        result = "Unknown job, try again"
+        if job_args[0] == "sort":
+            result = sort_job(job_args[1])
+        elif job_args[0] == "book_search":
+            result = book_search_job(job_args[1])
+        elif job_args[0] == "fibonacci":
+            fib_num = eval(job_args[1])
+            result = "Fibonacci ke-{}: {}".format(fib_num, fibonacci_job(fib_num))
+        
         end = time.time()
-
+        print(f'result {result}')
         client.sendall(bytes(f'{result}\nTime elapsed: {end-start}', "utf-8"))
+        status['status'] = 'ACTIVE'
         client.close()
-
-
-def execute_command(command_args):
-    result = "Unknown command"
-    if command_args[0] == "sort":
-        result = sort_job(command_args[1])
-    elif command_args[0] == "book_search":
-        result = book_search_job(command_args[1])
-    elif command_args[0] == "fibonacci":
-        fib_num = eval(command_args[1])
-        result = "Fibonacci ke-{}: {}".format(fib_num, fibonacci_job(fib_num))
-    print(f'result {result}')
-    return result
+    except(IndexError):
+        client.sendall(bytes('Unknown job, try again', "utf-8"))
 
 
 def sort_job(arr):
